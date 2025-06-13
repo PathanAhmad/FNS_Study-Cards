@@ -75,7 +75,7 @@
     // Function to parse CSV data
     async function fetchAndParseCSV() {
       try {
-        const response = await fetch('./questionsuggestions.txt');
+        const response = await fetch('https://pathanahmad.github.io/FNS_Study-Cards/questions.csv');
         const text = await response.text();
         
         // Parse CSV
