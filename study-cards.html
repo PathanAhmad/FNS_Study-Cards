@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Study Flashcards</title>
+  <!-- Tailwind CSS via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .question-card {
+      transition: all 0.3s ease;
+    }
+    .question-card:hover {
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen p-4 md:p-8">
+  <div class="max-w-4xl mx-auto">
+    <div class="flex justify-between items-center mb-6">
+      <h1 class="text-2xl md:text-3xl font-bold text-gray-800">Study Flashcards</h1>
+      <div class="text-sm bg-gray-200 px-3 py-1 rounded-full" id="question-count">
+        Loading...
+      </div>
+    </div>
+
+    <div id="loading" class="space-y-4">
+      <div class="h-[300px] w-full rounded-lg bg-gray-200 animate-pulse"></div>
+      <div class="flex justify-between">
+        <div class="h-10 w-20 bg-gray-200 animate-pulse rounded"></div>
+        <div class="h-10 w-20 bg-gray-200 animate-pulse rounded"></div>
+      </div>
+    </div>
+
+    <div id="questions-container" class="space-y-4 hidden"></div>
+
+    <div id="no-questions" class="text-center py-12 hidden">
+      <p class="text-gray-500">No questions available.</p>
+    </div>
+  </div>
+
+  <script>
+    // Function to get feedback color class
+    function getFeedbackColor(feedback) {
+      const feedbackNum = parseInt(feedback);
+      if (feedbackNum >= 4) return "bg-green-100 text-green-800";
+      if (feedbackNum >= 2) return "bg-yellow-100 text-yellow-800";
+      return "bg-red-100 text-red-800";
+    }
+
+    // Function to toggle question answer
+    function toggleQuestion(id) {
+      const answerElement = document.getElementById(`answer-${id}`);
+      const iconElement = document.getElementById(`icon-${id}`);
+      
+      if (answerElement.classList.contains('hidden')) {
+        answerElement.classList.remove('hidden');
+        iconElement.innerHTML = `
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" 
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-gray-500">
+            <path d="m18 15-6-6-6 6"/>
+          </svg>
+        `;
+      } else {
+        answerElement.classList.add('hidden');
+        iconElement.innerHTML = `
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" 
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-gray-500">
+            <path d="m6 9 6 6 6-6"/>
+          </svg>
+        `;
+      }
+    }
+
+    // Function to parse CSV data
+    async function fetchAndParseCSV() {
+      try {
+        const response = await fetch('questionsuggestions.csv');
+        const text = await response.text();
+        
+        // Parse CSV
+        const rows = text.split('\n');
+        
+        const parsedQuestions = rows
+          .slice(1) // Skip header row
+          .map((row, index) => {
+            // Handle commas within quoted fields
+            const values = [];
+            let currentValue = '';
+            let insideQuotes = false;
+
+            for (let i = 0; i < row.length; i++) {
+              const char = row[i];
+
+              if (char === '"' && (i === 0 || row[i - 1] !== '\\')) {
+                insideQuotes = !insideQuotes;
+              } else if (char === ',' && !insideQuotes) {
+                values.push(currentValue);
+                currentValue = '';
+              } else {
+                currentValue += char;
+              }
+            }
+
+            values.push(currentValue);
+
+            // Clean up quotes
+            const cleanValues = values.map(val => {
+              if (val.startsWith('"') && val.endsWith('"')) {
+                return val.substring(1, val.length - 1).replace(/""/g, '"');
+              }
+              return val;
+            });
+
+            return {
+              id: cleanValues[0] || `question-${index}`,
+              question: cleanValues[1] || '',
+              answer: cleanValues[2] || '',
+              feedback: cleanValues[3] || '',
+              comment: cleanValues[4] || ''
+            };
+          })
+          .filter(q => q.question && q.question.trim() !== '');
+
+        return parsedQuestions;
+      } catch (error) {
+        console.error('Error fetching or parsing CSV:', error);
+        return [];
+      }
+    }
+
+    // Function to render questions
+    function renderQuestions(questions) {
+      const container = document.getElementById('questions-container');
+      const loadingElement = document.getElementById('loading');
+      const noQuestionsElement = document.getElementById('no-questions');
+      const questionCountElement = document.getElementById('question-count');
+      
+      // Update question count
+      questionCountElement.textContent = `${questions.length} Questions`;
+      
+      // Hide loading, show container
+      loadingElement.classList.add('hidden');
+      
+      if (questions.length === 0) {
+        noQuestionsElement.classList.remove('hidden');
+        return;
+      }
+      
+      container.classList.remove('hidden');
+      
+      // Clear container
+      container.innerHTML = '';
+      
+      // Add questions
+      questions.forEach(question => {
+        const card = document.createElement('div');
+        card.className = 'question-card w-full bg-white rounded-lg border border-gray-200 p-4 cursor-pointer';
+        card.onclick = () => toggleQuestion(question.id);
+        
+        let feedbackBadge = '';
+        if (question.feedback) {
+          feedbackBadge = `
+            <span class="px-2 py-1 text-xs rounded-full ${getFeedbackColor(question.feedback)}">
+              Feedback: ${question.feedback}
+            </span>
+          `;
+        }
+        
+        let commentSection = '';
+        if (question.comment) {
+          commentSection = `
+            <div class="flex items-start gap-2 bg-gray-100 p-3 rounded-md mt-4">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" 
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-gray-500 mt-0.5">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+              </svg>
+              <div>
+                <p class="text-sm font-medium text-gray-700">Comment:</p>
+                <p class="text-sm text-gray-600">${question.comment}</p>
+              </div>
+            </div>
+          `;
+        }
+        
+        card.innerHTML = `
+          <div class="flex justify-between items-start">
+            <div class="flex items-center gap-2">
+              <span class="text-sm font-medium">#${question.id}</span>
+              <span id="icon-${question.id}">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" 
+                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-gray-500">
+                  <path d="m6 9 6 6 6-6"/>
+                </svg>
+              </span>
+            </div>
+            ${feedbackBadge}
+          </div>
+          
+          <div class="mt-2">
+            <p class="font-medium">${question.question}</p>
+          </div>
+          
+          <div id="answer-${question.id}" class="mt-4 space-y-4 hidden">
+            <div class="bg-blue-50 p-4 rounded-md">
+              <h3 class="font-semibold mb-2 text-blue-700">Answer:</h3>
+              <p>${question.answer}</p>
+            </div>
+            ${commentSection}
+          </div>
+        `;
+        
+        container.appendChild(card);
+      });
+    }
+
+    // Initialize
+    async function init() {
+      const questions = await fetchAndParseCSV();
+      renderQuestions(questions);
+    }
+
+    // Start the app
+    init();
+  </script>
+</body>
+</html>
